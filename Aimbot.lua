@@ -966,7 +966,7 @@ local function OnCreateMove(userCmd)
 
       if (isHitscan and (hitscanMethod == "plain" or hitscanMethod == "smooth"))
           or (not isHitscan and (projMethod == "plain" or projMethod == "smooth")) then
-         engine.SetViewAngles(currentTarget.angles)
+         engine.SetViewAngles(EulerAngles(currentTarget.angles:Unpack()))
       end
    end
 
