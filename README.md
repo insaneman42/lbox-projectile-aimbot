@@ -4,11 +4,12 @@
 [![GitHub forks](https://img.shields.io/github/forks/titaniummachine1/P_Aimbot.svg)](https://github.com/titaniummachine1/P_Aimbot/network)
 [![GitHub stars](https://img.shields.io/github/stars/titaniummachine1/P_Aimbot.svg)](https://github.com/titaniummachine1/P_Aimbot/stargazers)
 # P_Aimbot
-## This script REQUIRES [lnxLib](https://github.com/lnx00/Lmaobox-Library/releases/latest/) and [ImMenu](https://github.com/lnx00/Lmaobox-ImMenu/blob/main/src/ImMenu.lua). It will NOT work without these two luas.
+
+## This fork does NOT use lnxlib or immenu
+
 ### Projectile aimbot lua for lmaobox.
 
-
-[![Download Latest](https://img.shields.io/github/downloads/titaniummachine1/P_Aimbot/total.svg?style=for-the-badge&logo=download&label=Download%20Latest)](https://github.com/titaniummachine1/P_Aimbot/releases/latest/download/Aimbot.lua)
+Most settings of the aimbot are configured on lbox menu (ignore cloaked, bonked, aim fov, aim key, aim method, etc)
 
 ### Features
 - Main tab
@@ -41,24 +42,6 @@
 
 ---
 
-## Known Issues
-
-### 1. **Keybind Conflict: LBox vs Lua Hitchance Check**
-   - **Issue:** A conflict between the LBox framework and the Lua script occurs when they both attempt to manage the same keybind for shooting. This results in the hitchance check being fully ignored.
-   - **Cause:** Both LBox and the Lua script use the same keybind for the GUI control, leading to overlapping behavior.
-   - **Potential Solution:** Consider separating keybinds for LBox and the Lua script to avoid conflicts or implementing a priority system that ensures the hitchance check executes as intended.
-
----
-
-### 2. **`OnAttack` Not Triggering with Mouse 1 (M1)**
-   - **Issue:** The `OnAttack` function does not work when bound to `Mouse 1` (M1).
-   - **Cause:** The `OnAttack` bind needs to remain active for a period of time, but `M1` triggers rapidly and momentarily, causing the script to fail to detect the attack properly.
-   - **Potential Solution:** Use an alternative keybind for attack detection or rework the function to account for short-duration activations.
-
----
-
-### 3. **Hitchance Check Optimization**
-   - **Issue:** The hitchance check is currently dependent on real time predictions, which may lead to not shooting short attacks.
-   - **Potential Improvement:** Optimize the hitchance calculation to run as part of a continuous prediction system rather than relying solely on already-made predictions. This will improve consistency for dynamic and fast-moving targets.
+This fork has ***projectile*** and ***hitscan*** support, disable lbox's aimbot if you're gonna use this!
 
 ---

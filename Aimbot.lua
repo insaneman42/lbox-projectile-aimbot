@@ -10,34 +10,9 @@
     https://github.com/Muqa1
 ]]
 
-local menuLoaded, ImMenu = pcall(require, "ImMenu")
-assert(menuLoaded, "ImMenu not found, please install it!")
-assert(ImMenu.GetVersion() >= 0.66, "ImMenu version is too old, please update it!")
-
----@alias AimTarget { entity : Entity, angles : EulerAngles, factor : number }
-
----@type boolean, lnxLib
-local libLoaded, lnxLib = pcall(require, "lnxLib")
-assert(libLoaded, "lnxLib not found, please install it!")
-assert(lnxLib.GetVersion() >= 0.987, "lnxLib version is too old, please update it!")
-
-local Math, Conversion = lnxLib.Utils.Math, lnxLib.Utils.Conversion
-local WPlayer = lnxLib.TF2.WPlayer
-local Helpers = lnxLib.TF2.Helpers
-local Fonts = lnxLib.UI.Fonts
-
-local Hitbox = {
-   Head = 1,
-   Neck = 2,
-   Pelvis = 4,
-   Body = 5,
-   Chest = 7,
-   Feet = 11,
-}
-
 local Menu = { -- this is the config that will be loaded every time u load the script
 
-   tabs = {   -- dont touch this, this is just for managing the tabs in the menu
+   tabs = {    -- dont touch this, this is just for managing the tabs in the menu
       Main = true,
       Advanced = false,
       Visuals = false,
@@ -46,8 +21,6 @@ local Menu = { -- this is the config that will be loaded every time u load the s
    Main = {
       AimKey = gui.GetValue("aim key"),
       AutoShoot = gui.GetValue("auto shoot") == 1 and true or false,
-      Silent = true,
-      pSilent = gui.GetValue("aim method (projectile)") == "silent +",
       MinDistance = 100,
       MaxDistance = 1500,
       MinHitchance = 40,
@@ -59,7 +32,7 @@ local Menu = { -- this is the config that will be loaded every time u load the s
       PredTicks = 77,
       Hitchance_Accuracy = 17,
       AccuracyWeight = 5,
-      StrafePrediction = true,
+      StrafePrediction = false,
       StrafeSamples = 17,
       ProjectileSegments = 7,
       Aim_Modes = {
@@ -81,6 +54,25 @@ local Menu = { -- this is the config that will be loaded every time u load the s
    },
 }
 
+--- download my general purpose lib straight from the repo
+---@module "ngl"
+local ngl = load(http.Get("https://raw.githubusercontent.com/uosq/lbox-ngl-lib/refs/heads/main/ngl.lua"))()
+
+local menuLoaded, ImMenu = pcall(require, "ImMenu")
+assert(menuLoaded, "ImMenu not found, please install it!")
+assert(ImMenu.GetVersion() >= 0.66, "ImMenu version is too old, please update it!")
+
+---@alias AimTarget { entity : Entity, angles : EulerAngles, factor : number }
+
+local Hitbox = {
+   Head = 1,
+   Neck = 2,
+   Pelvis = 4,
+   Body = 5,
+   Chest = 7,
+   Feet = 11,
+}
+
 -- Cache API calls for optimization
 local math = math
 local engine = engine
@@ -94,6 +86,11 @@ local math_sqrt = math.sqrt
 local math_floor = math.floor
 local math_rad = math.rad
 local math_deg = math.deg
+local math_acos = math.acos
+local math_abs = math.abs
+local math_min = math.min
+local math_exp = math.exp
+local math_max = math.max
 
 local TickInterval = globals.TickInterval
 
@@ -111,181 +108,88 @@ local draw_Line = draw.Line
 local draw_Text = draw.Text
 local draw_FilledRect = draw.FilledRect
 
-local Vector3 = Vector3
-
-local Lua__fullPath = GetScriptName()
-local Lua__fileName = Lua__fullPath:match("\\([^\\]-)$"):gsub("%.lua$", "")
-
-local function CreateCFG(folder_name, table)
-   local success, fullPath = filesystem.CreateDirectory(folder_name)
-   local filepath = tostring(fullPath .. "/config.cfg")
-   local file = io.open(filepath, "w")
-
-   if file then
-      local function serializeTable(tbl, level)
-         level = level or 0
-         local result = string.rep("    ", level) .. "{\n"
-         for key, value in pairs(tbl) do
-            result = result .. string.rep("    ", level + 1)
-            if type(key) == "string" then
-               result = result .. '["' .. key .. '"] = '
-            else
-               result = result .. "[" .. key .. "] = "
-            end
-            if type(value) == "table" then
-               result = result .. serializeTable(value, level + 1) .. ",\n"
-            elseif type(value) == "string" then
-               result = result .. '"' .. value .. '",\n'
-            else
-               result = result .. tostring(value) .. ",\n"
-            end
-         end
-         result = result .. string.rep("    ", level) .. "}"
-         return result
-      end
-
-      local serializedConfig = serializeTable(table)
-      file:write(serializedConfig)
-      file:close()
-      printc(255, 183, 0, 255, "[" .. os.date("%H:%M:%S") .. "] Saved Config to " .. tostring(fullPath))
-   end
-end
-
-local function LoadCFG(folder_name)
-   local success, fullPath = filesystem.CreateDirectory(folder_name)
-   local filepath = tostring(fullPath .. "/config.cfg")
-   local file = io.open(filepath, "r")
-
-   if file then
-      local content = file:read("*a")
-      file:close()
-      local chunk, err = load("return " .. content)
-      if chunk then
-         printc(0, 255, 140, 255, "[" .. os.date("%H:%M:%S") .. "] Loaded Config from " .. tostring(fullPath))
-         return chunk()
-      else
-         CreateCFG(string.format([[Lua %s]], Lua__fileName), Menu) --saving the config
-         print("Error loading configuration:", err)
-      end
-   end
-end
-
-local status, loadedMenu = pcall(function()
-   return assert(LoadCFG(string.format([[Lua %s]], Lua__fileName)))
-end) -- Auto-load config
-
--- Function to check if all expected functions exist in the loaded config
-local function checkAllFunctionsExist(expectedMenu, loadedMenu)
-   for key, value in pairs(expectedMenu) do
-      if type(value) == 'function' then
-         -- Check if the function exists in the loaded menu and has the correct type
-         if not loadedMenu[key] or type(loadedMenu[key]) ~= 'function' then
-            return false
-         end
-      end
-   end
-   for key, value in pairs(expectedMenu) do
-      if not loadedMenu[key] or type(loadedMenu[key]) ~= type(value) then
-         return false
-      end
-   end
-   return true
-end
-
--- Execute this block only if loading the config was successful
-if status then
-   if checkAllFunctionsExist(Menu, loadedMenu) and not input.IsButtonDown(KEY_LSHIFT) then
-      Menu = loadedMenu
-   else
-      print("Config is outdated or invalid. Creating a new config.")
-      CreateCFG(string.format([[Lua %s]], Lua__fileName), Menu) -- Save the config
-   end
-else
-   print("Failed to load config. Creating a new config.")
-   CreateCFG(string.format([[Lua %s]], Lua__fileName), Menu) -- Save the config
-end
-
-local latency = 0
-local lerp = 0
-local strafeAngles = {} ---@type number[]
-local hitChance = 0
-local lastPosition = {}
-local priorPrediction = {}
-local hitChanceRecords = {}
-local vPath = {}
-local vHitbox = { Vector3(-22, -22, 0), Vector3(22, 22, 80) }
-local MAX_ANGLE_HISTORY = Menu.Advanced.StrafeSamples -- Number of past angles to consider for averaging
-local MAX_CENTER_HISTORY = 5                          -- Maximum number of center samples to consider for smoothing
-
-local strafeAngleHistories = {}                       -- History of strafe angles for each player
-local centerHistories = {}                            -- History of center directions for each player
-
-function Normalize(vec)
-   local length = math_sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z)
-   return Vector3(vec.x / length, vec.y / length, vec.z / length)
-end
-
--- Define a table for centralized storage
-local dataStorage = {}
-
--- Function to set or get values from the storage
-function DataStorage(key, value)
-   -- If a value is provided, set it
-   if value ~= nil then
-      dataStorage[key] = value
-   else
-      -- If no value is provided, return the stored value
-      return dataStorage[key]
-   end
-end
-
----@param me WPlayer
-local function CalcStrafe(me)
-   local players = FindByClass("CTFPlayer")
-
-   for idx, entity in ipairs(players) do
-      -- Reset data for dormant or dead players and teammates
-      if entity:IsDormant() or not entity:IsAlive() or entity:GetTeamNumber() == me:GetTeamNumber() then
-         strafeAngleHistories[idx] = nil
-         centerHistories[idx] = nil
-      else
-         local angle = entity:EstimateAbsVelocity():Angles() -- get angle of velocity vector
-
-         -- Initialize angle history for the player if needed
-         strafeAngleHistories[idx] = strafeAngleHistories[idx] or {}
-         centerHistories[idx] = centerHistories[idx] or {}
-
-         -- Calculate the delta angle
-         local delta = angle.y - (strafeAngleHistories[idx][#strafeAngleHistories[idx]] or 0)
-         delta = Math.NormalizeAngle(delta)
-
-         -- Update the angle history
-         table.insert(strafeAngleHistories[idx], angle.y)
-         if #strafeAngleHistories[idx] > MAX_ANGLE_HISTORY then
-            table.remove(strafeAngleHistories[idx], 1)
-         end
-
-         -- Calculate the center direction based on recent strafe angles
-         if #strafeAngleHistories[idx] >= 3 then
-            local center = angle.y -- Use the most recent angle as the center
-            table.insert(centerHistories[idx], center)
-
-            if #centerHistories[idx] > MAX_CENTER_HISTORY then
-               table.remove(centerHistories[idx], 1)
-            end
-
-            -- Use the most recent center direction
-            local mostRecentCenter = centerHistories[idx][#centerHistories[idx]]
-
-            -- Do something with mostRecentCenter
-         end
-      end
-   end
-end
-
 local M_RADPI = 180 / math.pi
+local function isNaN(number) return number ~= number end
 
-local function isNaN(x) return x ~= x end
+local latency, lerp, strafeAngles, hitChance, lastPosition, priorPrediction
+local hitChanceRecords, vPath, vHitbox, MAX_ANGLE_HISTORY, MAX_CENTER_HISTORY
+local strafeAngleHistories, centerHistories = {},
+    {} --- history of strafe angles for each player, and history of center directions for each player
+
+latency, lerp, hitChance = 0, 0, 0
+lastPosition, priorPrediction, hitChanceRecords, vPath = {}, {}, {}, {}
+---@type number[]
+strafeAngles = {}
+
+MAX_ANGLE_HISTORY = Menu.Advanced.StrafeSamples
+MAX_CENTER_HISTORY = 5
+
+--- what are these magical numbers?
+--- StudioBBox Mins and Maxs?
+vHitbox = { Vector3(-22, -22, 0), Vector3(22, 22, 80) }
+
+local vUp = Vector3(0, 0, 1)
+local GROUND_COLLISION_ANGLE_LOW = 45
+local GROUND_COLLISION_ANGLE_HIGH = 60
+local FORWARD_COLLISION_ANGLE = 55
+
+local projectileSimulation = {}
+local projectileSimulation2 = Vector3()
+
+local EMPTY_VECTOR = Vector3() -- Represents an empty vector for zero velocity cases
+
+---@param player Entity
+local function CalcStrafe(player)
+   local strafes = {}
+   local index = player:GetIndex()
+   --- assume every player in players table is valid (not dormant, alive, not same team as localplayer, etc)
+   local velocityAngle = player:EstimateAbsVelocity():Angles() --- angle of velocity vector
+
+   --- initialize angle history if neeeded
+   strafeAngleHistories[index] = strafeAngleHistories[index] or {}
+   centerHistories[index] = centerHistories[index] or {}
+
+   --- delta velocity angle
+   local delta = velocityAngle.y - (strafeAngleHistories[index][#strafeAngleHistories[index]] or 0)
+   --- normalize the angle
+   delta = (delta % 360) > 180 and delta - 360 or delta
+
+   --strafeAngleHistories[index][#strafeAngleHistories[index]+1] = velocityAngle.y yeah no this is too ugly even for me
+   table.insert(strafeAngleHistories[index], velocityAngle.y)
+   if #strafeAngleHistories[index] > MAX_ANGLE_HISTORY then
+      table.remove(strafeAngleHistories[index], 1)
+   end
+
+   if #strafeAngleHistories[index] >= 3 then
+      local center = velocityAngle.y -- Use the most recent angle as the center
+      table.insert(centerHistories[index], center)
+
+      if #centerHistories[index] > MAX_CENTER_HISTORY then
+         table.remove(centerHistories[index], 1)
+      end
+
+      -- Use the most recent center direction
+      local mostRecentCenter = centerHistories[index][#centerHistories[index]]
+      local currentPos = player:GetAbsOrigin()
+      local currentVelocity = player:EstimateAbsVelocity()
+
+      -- Predict next position based on velocity and strafe pattern
+      local predictedPos = Vector3(
+         currentPos.x + (currentVelocity.x * globals.AbsoluteFrameTime()),
+         currentPos.y + (currentVelocity.y * globals.AbsoluteFrameTime()),
+         currentPos.z + (currentVelocity.z * globals.AbsoluteFrameTime())
+      )
+
+      strafes = {
+         currentPos = currentPos,
+         predictedPos = predictedPos,
+         strafeCenter = mostRecentCenter,
+         deltaAngle = delta
+      }
+   end
+
+   return strafes
+end
 
 -- Normalize vector function
 local function Normalize(Vector)
@@ -304,19 +208,10 @@ local function RotateVector(vector, angle)
    )
 end
 
--- Define the necessary variables
-local vUp = Vector3(0, 0, 1)           -- Replace with the actual up vector
-local GROUND_COLLISION_ANGLE_LOW = 45  -- Replace with the actual value
-local GROUND_COLLISION_ANGLE_HIGH = 60 -- Replace with the actual value
-local FORWARD_COLLISION_ANGLE = 55
-
-local projectileSimulation = {}
-local projectileSimulation2 = Vector3()
-
 -- Helper function for forward collision
 local function handleForwardCollision(vel, wallTrace)
    local normal = wallTrace.plane
-   local angle = math_deg(math.acos(normal:Dot(vUp)))
+   local angle = math_deg(math_acos(normal:Dot(vUp)))
    if angle > FORWARD_COLLISION_ANGLE then
       local dot = vel:Dot(normal)
       vel = vel - normal * dot
@@ -327,7 +222,7 @@ end
 -- Helper function for ground collision
 local function handleGroundCollision(vel, groundTrace)
    local normal = groundTrace.plane
-   local angle = math_deg(math.acos(normal:Dot(vUp)))
+   local angle = math_deg(math_acos(normal:Dot(vUp)))
    local onGround = false
    if angle < GROUND_COLLISION_ANGLE_LOW then
       onGround = true
@@ -353,15 +248,15 @@ local function calculateHitChancePercentage(lastPredictedPos, currentPos)
       2)
 
    -- Calculate vertical distance with an allowance for vertical movement
-   local verticalDistance = math.abs(currentPos.z - lastPredictedPos.z)
+   local verticalDistance = math_abs(currentPos.z - lastPredictedPos.z)
 
    -- Define maximum acceptable distances
    local maxHorizontalDistance = 12 -- Max acceptable horizontal distance in units
-   local maxVerticalDistance = 45 -- Max acceptable vertical distance in units
+   local maxVerticalDistance = 45   -- Max acceptable vertical distance in units
 
    -- Normalize the distances to a 0-1 scale
-   local horizontalFactor = math.min(horizontalDistance / maxHorizontalDistance, 1)
-   local verticalFactor = math.min(verticalDistance / maxVerticalDistance, 1)
+   local horizontalFactor = math_min(horizontalDistance / maxHorizontalDistance, 1)
+   local verticalFactor = math_min(verticalDistance / maxVerticalDistance, 1)
 
    -- Calculate the hit chance as a percentage
    local overallFactor = (horizontalFactor + verticalFactor) / 2
@@ -371,7 +266,6 @@ local function calculateHitChancePercentage(lastPredictedPos, currentPos)
 
    return hitChancePercentage
 end
-
 
 -- Helper function to check path clearance for side collisions
 local function checkPathClearance(dest, direction, angle, distance, origin, target)
@@ -489,8 +383,8 @@ end
 
 -- Precompute and cache frequently used constants and empty vectors
 local MASK_PLAYERSOLID = 100679691 -- Example value; replace with the actual value from your environment for tracing
-local FULL_HIT_FRACTION = 1.0           -- Represents a full hit fraction in trace results
-local DRAG_COEFFICIENT = 0.029374       -- Combined drag coefficients for drag simulation
+local FULL_HIT_FRACTION = 1.0      -- Represents a full hit fraction in trace results
+local DRAG_COEFFICIENT = 0.029374  -- Combined drag coefficients for drag simulation
 
 -- Function to solve projectile trajectory and return the necessary angles and time to hit a target
 ---@param origin Vector3  -- The starting position of the projectile
@@ -538,7 +432,7 @@ local function SolveProjectile(origin, dest, speed, gravity, sv_gravity, target,
 
       -- Return the result with no gravity calculations
       return {
-         angles = Math.PositionAngles(origin, dest),
+         angles = ngl.CalcAngle(origin, dest),
          time = time_to_target,
          Prediction = dest,
          Positions = { origin, dest }
@@ -551,7 +445,7 @@ local function SolveProjectile(origin, dest, speed, gravity, sv_gravity, target,
 
       -- Solve the quadratic equation for projectile motion
       local discriminant = speed_squared * speed_squared -
-         effective_gravity * (gravity_horizontal_squared + 2 * vertical_distance * speed_squared)
+          effective_gravity * (gravity_horizontal_squared + 2 * vertical_distance * speed_squared)
       if discriminant < 0 then return nil end -- No real solution, so return nil
 
       -- Calculate the pitch and yaw angles required for the projectile to reach the target
@@ -572,7 +466,7 @@ local function SolveProjectile(origin, dest, speed, gravity, sv_gravity, target,
       end
 
       -- Define the number of segments to divide the trajectory into for simulation (default is 2)
-      local number_of_segments = math.max(1, Menu.Advanced.ProjectileSegments or 2)
+      local number_of_segments = math_max(1, Menu.Advanced.ProjectileSegments or 2)
       local segment_duration = time_to_target / number_of_segments
       local current_position = origin
       local current_velocity = speed
@@ -585,15 +479,15 @@ local function SolveProjectile(origin, dest, speed, gravity, sv_gravity, target,
          local time_segment = segment * segment_duration
 
          -- Apply drag to the current velocity over time
-         current_velocity = current_velocity * math.exp(-DRAG_COEFFICIENT * time_segment)
+         current_velocity = current_velocity * math_exp(-DRAG_COEFFICIENT * time_segment)
 
          -- Calculate the new position based on current velocity, pitch, yaw, and gravity
          local horizontal_displacement = current_velocity * math_cos(pitch_angle) * time_segment
          local vertical_displacement = current_velocity * math_sin(pitch_angle) * time_segment -
-            0.5 * effective_gravity * time_segment * time_segment
+             0.5 * effective_gravity * time_segment * time_segment
          local new_position = origin +
-            Vector3(horizontal_displacement * math_cos(yaw_angle), horizontal_displacement * math_sin(yaw_angle),
-               vertical_displacement)
+             Vector3(horizontal_displacement * math_cos(yaw_angle), horizontal_displacement * math_sin(yaw_angle),
+                vertical_displacement)
 
          -- Perform a trace to check for collisions
          local trace = TraceLine(current_position, new_position, MASK_PLAYERSOLID, shouldHitEntity)
@@ -620,18 +514,11 @@ local function SolveProjectile(origin, dest, speed, gravity, sv_gravity, target,
    end
 end
 
---Returns whether the player is on the ground
----@return boolean
-local function IsOnGround(player)
-   local pFlags = player:GetPropInt("m_fFlags")
-   return (pFlags & FL_ONGROUND) == 1
-end
-
 -- Function to calculate the trust factor based on the number of records
 local function calculateTrustFactor(numRecords, maxRecords, growthRate)
    -- Ensure we avoid division by zero
    if maxRecords == 0 then
-       return 0
+      return 0
    end
 
    -- Calculate the ratio of current records to maximum records
@@ -642,11 +529,11 @@ local function calculateTrustFactor(numRecords, maxRecords, growthRate)
 
    -- Ensure the trust factor is capped at 1
    if trustFactor > 1 then
-       trustFactor = 1
+      trustFactor = 1
    end
 
    -- Round the trust factor to 2 decimal places
-   trustFactor = math_floor(trustFactor * 100 + 0.5) / 100
+   trustFactor = math_floor((trustFactor * 100) + 0.5) / 100
 
    return trustFactor
 end
@@ -654,47 +541,52 @@ end
 -- Function to calculate the adjusted hit chance
 local function calculateAdjustedHitChance(hitChance, trustFactor)
    -- Apply the trust factor as a multiplier to the hit chance
-   return math_floor(hitChance * trustFactor * 100 + 0.5) / 100
+   return math_floor((hitChance * trustFactor * 100) + 0.5) / 100
 end
 
 local function GetBonePosition(entity, hitbox)
-    local model = entity:GetModel()
-    local studioHdr = models.GetStudioModel(model)
+   local model = entity:GetModel()
+   local studioHdr = models.GetStudioModel(model)
 
-    local myHitBoxSet = entity:GetPropInt("m_nHitboxSet")
-    local hitboxSet = studioHdr:GetHitboxSet(myHitBoxSet)
-    local hitboxes = hitboxSet:GetHitboxes()
-    local boneMatrices = entity:SetupBones()
-    local hitbox = hitboxes[hitbox]
-    local bone = hitbox:GetBone()
-    local boneMatrix = boneMatrices[bone]
-    if boneMatrix == nil then return nil end
-    local bonePos = Vector3( boneMatrix[1][4], boneMatrix[2][4], boneMatrix[3][4] )
-    return bonePos
+   local myHitBoxSet = entity:GetPropInt("m_nHitboxSet")
+   local hitboxSet = studioHdr:GetHitboxSet(myHitBoxSet)
+   local hitboxes = hitboxSet:GetHitboxes()
+   local hitbox = hitboxes[hitbox]
+
+   local boneMatrices = entity:SetupBones()
+   local bone = hitbox:GetBone()
+   local boneMatrix = boneMatrices[bone]
+
+   if boneMatrix == nil then return nil end
+   local bonePos = Vector3(boneMatrix[1][4], boneMatrix[2][4], boneMatrix[3][4])
+   return bonePos
 end
 
 ---@param player Entity
-local function GetBodyPosition (player)
-    return GetBonePosition(player, Hitbox.Pelvis)
+local function GetBodyPosition(player)
+   return GetBonePosition(player, Hitbox.Pelvis)
 end
 
 local function GetHeadPosition(player)
-    return GetBonePosition(player, Hitbox.Head)
+   return GetBonePosition(player, Hitbox.Head)
 end
 
-local function GetFeetPosition (player)
-    return player:GetAbsOrigin() + Vector3(0,0,10)
+--- i wish there was a better way to do this, but i cant think of one for now
+local function GetFeetPosition(player)
+   return player:GetAbsOrigin() + Vector3(0, 0, 10)
 end
 
+---@param weapon Entity
+---@param player Entity
 local function GetAimPos(weapon, player)
    --local aimPos = weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_ROCKET and GetFeetPosition(player) or weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_ARROW and GetHeadPosition(player) or GetBodyPosition(player)
    if weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_ROCKET
-   or weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_PIPEBOMB then
+       or weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_PIPEBOMB then
       return GetFeetPosition(player)
    elseif weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_ARROW then
       local class = player:GetPropInt("m_PlayerClass", "m_iClass")
       --- player is a medic or sniper?
-      if class == 2 then --- medic
+      if class == 2 then     --- medic
          return GetBodyPosition(player)
       elseif class == 5 then --- sniper
          return GetHeadPosition(player)
@@ -707,7 +599,7 @@ end
 -- Main function
 local function CheckProjectileTarget(me, weapon, player)
    local tick_interval = TickInterval()
-   local shootPos = me:GetEyePos()
+   local shootPos = ngl.GetShootPos(me)
    local aimPos = GetAimPos(weapon, player)
    if not aimPos then return nil end
    local aimOffset = aimPos - player:GetAbsOrigin()
@@ -716,23 +608,24 @@ local function CheckProjectileTarget(me, weapon, player)
    local strafeAngle = Menu.Advanced.StrafePrediction and strafeAngles[player:GetIndex()] or nil
    local vStep = Vector3(0, 0, stepSize / 2)
    vPath = {}
-   local lastP, lastV, lastG = player:GetAbsOrigin(), player:EstimateAbsVelocity(), IsOnGround(player)
+   local lastP, lastV, lastG = player:GetAbsOrigin(), player:EstimateAbsVelocity(),
+       player:GetPropInt("m_fFlags") & FL_ONGROUND == 1
    local BlastRadius = 150
 
    -- trace ignore simulated player
    local function shouldHitEntity(entity)
       return entity:GetIndex() ~= player:GetIndex() or
-         entity:GetTeamNumber() ~= player:GetTeamNumber()
+          entity:GetTeamNumber() ~= player:GetTeamNumber()
    end
 
    -- Check initial conditions
-   local projInfo = weapon:GetProjectileInfo()
+   local projInfo = ngl.GetProjectileInfo(weapon)
    if not projInfo or not gravity or not stepSize then return nil end
 
    local PredTicks = Menu.Advanced.PredTicks
 
    local speed = projInfo[1]
-   if me:DistTo(player) > PredTicks * speed then return nil end
+   if vector.Distance(aimPos, player:GetAbsOrigin()) > PredTicks * speed then return nil end
 
    local targetAngles, fov
 
@@ -838,7 +731,7 @@ local function CheckProjectileTarget(me, weapon, player)
          return nil
       end
 
-      local ticks = Conversion.Time_to_Ticks(time) + 1
+      local ticks = (time * 66.67) + 1
       if ticks > i then goto continue end
 
       targetAngles = solution.angles
@@ -873,6 +766,78 @@ local function CheckProjectileTarget(me, weapon, player)
    return { entity = player, angles = targetAngles, factor = fov, Prediction = vPath[#vPath] }
 end
 
+---@param name string
+local function bGetGUIValue(name)
+   return gui.GetValue(name) == 1
+end
+
+---@param localplayer Entity
+---@param weapon Entity
+local function RunBullet(localplayer, weapon, target)
+   --- we will only run stuff when lbox aimbot is turned off
+   local aimPos = ngl.GetAimPosition(localplayer, weapon)
+   local shootPos = ngl.GetShootPos(localplayer)
+
+   local targetPos = ngl.GetHitboxPos(target, aimPos)
+   if not targetPos then return end
+
+   --local angle = ngl.CalcAngle(shootPos, targetPos)
+   --- multipoint :3
+   local angle = aimPos == ngl.HitboxBoneIndex.Body and ngl.ScanBody(localplayer, target) or
+       ngl.ScanHead(localplayer, target)
+   if not angle then return end
+
+   if not ngl.VisPosHitboxIdOut(target, shootPos, angle.pos) then return end
+
+   local fov = ngl.CalcFov(engine:GetViewAngles(), angle.angle)
+
+   if fov > gui.GetValue("aim fov") then return end
+
+   if gui.GetValue("norecoil") then
+      local punchangle = localplayer:GetPropVector("m_vecPunchAngle")
+      angle.angle = angle.angle - punchangle
+   end
+
+   return { angles = angle.angle, factor = fov }
+end
+
+---@param localplayer Entity
+---@param weapon Entity
+---@param target Entity
+local function RunMelee(localplayer, weapon, target)
+   local shootPos = ngl.GetShootPos(localplayer)
+   local aimPos = ngl.GetAimPosition(localplayer, weapon)
+
+   local vis_check = true
+
+   local method = gui.GetValue("melee aimbot")
+   if method == "rage" then
+      vis_check = false
+   end
+
+   local targetPos = ngl.GetHitboxPos(target, aimPos)
+   if not targetPos then return end
+
+   if vis_check then
+      local trace = weapon:DoSwingTrace()
+      --- if not visible from where we hit, dont calculate angle and fov
+      if trace.entity ~= target then return end
+   end
+
+   local angle = ngl.CalcAngle(shootPos, targetPos)
+   local fov = ngl.CalcFov(engine:GetViewAngles(), angle)
+   if fov > gui.GetValue("aim fov") then return end
+
+   if gui.GetValue("norecoil") then
+      local punchangle = localplayer:GetPropVector("m_vecPunchAngle")
+      angle = angle - punchangle
+   end
+
+   return { angles = angle, factor = fov }
+end
+
+---@param me Entity
+---@param weapon Entity
 local function GetBestTarget(me, weapon)
    local players = FindByClass("CTFPlayer")
    local bestTarget = nil
@@ -880,33 +845,31 @@ local function GetBestTarget(me, weapon)
    local localPlayerOrigin = me:GetAbsOrigin()
    local localPlayerViewAngles = engine.GetViewAngles()
 
-   if not weapon:IsShootingWeapon() then
-      return nil
-   end
-
    for _, player in pairs(players) do
-      if player == nil or not player:IsAlive()
-         or player:IsDormant()
-         or player == me or player:GetTeamNumber() == me:GetTeamNumber()
-         or gui.GetValue("ignore cloaked") == 1 and player:InCond(4) then
-         goto continue
-      end
+      if player:GetTeamNumber() == me:GetTeamNumber() then goto continue end
+      if player:IsDormant() or not player:IsAlive() then goto continue end
+      if player:InCond(E_TFCOND.TFCond_Cloaked) and bGetGUIValue("ignore cloaked") then goto continue end
+      if player:InCond(E_TFCOND.TFCond_Taunting) and bGetGUIValue("ignore taunting") then goto continue end
+      if player:InCond(E_TFCOND.TFCond_Disguised) and bGetGUIValue("ignore disguised") then goto continue end
+      if player:InCond(E_TFCOND.TFCond_DeadRingered) and bGetGUIValue("ignore deadringer") then goto continue end
+      if player:InCond(E_TFCOND.TFCond_Bonked) and bGetGUIValue("ignore bonked") then goto continue end
 
       local playerOrigin = player:GetAbsOrigin()
-      local distance = math.abs(playerOrigin.x - localPlayerOrigin.x) +
-         math.abs(playerOrigin.y - localPlayerOrigin.y) +
-         math.abs(playerOrigin.z - localPlayerOrigin.z)
 
-      local angles = Math.PositionAngles(localPlayerOrigin, playerOrigin)
-      local fov = Math.AngleFov(angles, localPlayerViewAngles)
+      local angles = ngl.CalcAngle(localPlayerOrigin, playerOrigin)
+      local fov = ngl.CalcFov(angles, localPlayerViewAngles)
 
-      if fov > Menu.Main.AimFov then
+      if fov > gui.GetValue("aim fov") then
          goto continue
       end
 
-      local distanceFactor = Math.RemapValClamped(distance, 50, 2500, 1, 0.09)
-      local fovFactor = Math.RemapValClamped(fov, 0, Menu.Main.AimFov, 1, 0.7)
-      local isVisible = Helpers.VisPos(player, localPlayerOrigin + Vector3(0, 0, 75), playerOrigin + Vector3(0, 0, 75))
+      local distance = math_abs(playerOrigin.x - localPlayerOrigin.x) +
+          math_abs(playerOrigin.y - localPlayerOrigin.y) +
+          math_abs(playerOrigin.z - localPlayerOrigin.z)
+
+      local distanceFactor = ngl.RemapValClamped(distance, 50, 2500, 1, 0.09)
+      local fovFactor = ngl.RemapValClamped(fov, 0, gui.GetValue("aim fov"), 1, 0.7)
+      local isVisible = ngl.VisPos(player, localPlayerOrigin + Vector3(0, 0, 75), playerOrigin + Vector3(0, 0, 75))
       local visibilityFactor = isVisible and 1 or 0.5
       local factor = fovFactor * visibilityFactor * distanceFactor
 
@@ -920,70 +883,38 @@ local function GetBestTarget(me, weapon)
 
    if bestTarget then
       -- Projectile weapon
-      return CheckProjectileTarget(me, weapon, bestTarget)
+      if weapon:IsMeleeWeapon() then
+         return RunMelee(me, weapon, bestTarget)
+      end
+      if weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_BULLET then
+         return RunBullet(me, weapon, bestTarget)
+      else --- not a hitscan weapon, so we predict it
+         return CheckProjectileTarget(me, weapon, bestTarget)
+      end
    else
       return nil
    end
 end
 
-local EMPTY_VECTOR = Vector3() -- Represents an empty vector for zero velocity cases
-
---- https://www.unknowncheats.me/forum/team-fortress-2-a/273821-canshoot-function.html pasted from one the comments like seriously wtf is this
-local lastFire = 0
-local nextAttack = 0
-local old_weapon = nil
----@param local_player Entity
-local function CanShoot(local_player)
-   local local_weapon = local_player:GetPropEntity("m_hActiveWeapon")
-   if not local_weapon then return false end
-
-   local lastfiretime = local_weapon:GetPropFloat("LocalActiveTFWeaponData", "m_flLastFireTime")
-
-   if lastFire ~= lastfiretime or local_weapon ~= old_weapon then
-      lastFire = lastfiretime
-      nextAttack = local_weapon:GetPropFloat("LocalActiveWeaponData", "m_flNextPrimaryAttack")
-   end
-
-   if local_weapon:GetPropInt("LocalWeaponData", "m_iClip1") == 0 then
-      return false
-   end
-
-   old_weapon = local_weapon
-
-   return nextAttack <= (local_player:GetPropInt("m_nTickBase") * TickInterval())
-end
-
 ---@param userCmd UserCmd
 local function OnCreateMove(userCmd)
    --- check if aimbot is enabled on lbox
-   if gui.GetValue("aim bot") == 0 then return end
+   if gui.GetValue("aim bot") == 1 then return end
 
    if engine.IsChatOpen() or engine.Con_IsVisible() or engine.IsGameUIVisible() then return end
-   if not input.IsButtonDown(Menu.Main.AimKey) then
+   if not input.IsButtonDown(gui.GetValue("aim key")) then
       return
    end
 
-    --- oh no this is horrible
-   Menu.Main.AimFov = gui.GetValue("aim fov")
-   Menu.Main.AimKey = gui.GetValue("aim key")
-   Menu.Main.AutoShoot = gui.GetValue("auto shoot") == 1
-
-   local method = gui.GetValue("aim method (projectile)")
-   Menu.Main.pSilent = method == "silent +"
-   Menu.Main.Silent = not Menu.Main.pSilent and method == "silent"
-
    projectileSimulation2 = EMPTY_VECTOR
-   local me = WPlayer.GetLocal()
+
+   local me = entities:GetLocalPlayer()
    if not me or not me:IsAlive() then return end
-   if not CanShoot(me) then return end
 
-   -- Calculate strafe angles (optional)
-   if Menu.Advanced.StrafePrediction then
-      CalcStrafe(me)
-   end
-
-   local weapon = me:GetActiveWeapon()
+   local weapon = ngl.GetCurrentWeapon(me)
    if not weapon then return end
+
+   if not ngl.CanWeaponShoot(me, weapon) then return end
 
    local netchannel = clientstate.GetNetChannel()
    if not netchannel then return end
@@ -1001,8 +932,20 @@ local function OnCreateMove(userCmd)
       return
    end
 
+   local isHitscan = weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_BULLET
+   local isMelee = weapon:IsMeleeWeapon()
+   local hitscanMethod, projMethod = gui.GetValue("aim method"), gui.GetValue("aim method (projectile)")
+
+   -- Calculate strafe angles (optional)
+   if Menu.Advanced.StrafePrediction and not isHitscan and not isMelee then
+      local strafe = CalcStrafe(me)
+      if strafe then
+         strafeAngles[currentTarget.entity:GetIndex()] = strafe.deltaAngle
+      end
+   end
+
    -- Auto Shoot
-   if Menu.Main.AutoShoot then
+   if bGetGUIValue("auto shoot") then
       if weapon:GetWeaponID() == TF_WEAPON_COMPOUND_BOW or weapon:GetWeaponID() == TF_WEAPON_PIPEBOMBLAUNCHER then
          -- Huntsman
          if weapon:GetChargeBeginTime() > 0 then
@@ -1019,9 +962,10 @@ local function OnCreateMove(userCmd)
    if (userCmd.buttons & IN_ATTACK ~= 0) then
       -- Aim at the target
       userCmd:SetViewAngles(currentTarget.angles:Unpack())
-      userCmd.sendpacket = not Menu.Main.pSilent
+      userCmd.sendpacket = (isHitscan and projMethod == "silent +") or isMelee
 
-      if not Menu.Main.pSilent and not Menu.Main.Silent then
+      if (isHitscan and (hitscanMethod == "plain" or hitscanMethod == "smooth"))
+          or (not isHitscan and (projMethod == "plain" or projMethod == "smooth")) then
          engine.SetViewAngles(currentTarget.angles)
       end
    end
@@ -1078,7 +1022,7 @@ callbacks.Register("FireGameEvent", "PlayerHurtEvent", PlayerHurtEvent)
 local clear_lines = 0
 
 local function OnDraw()
-   draw.SetFont(Fonts.Verdana)
+   draw.SetFont(font)
    draw.Color(255, 255, 255, 255)
 
    if not input.IsButtonDown(gui.GetValue("aim key")) then
@@ -1227,10 +1171,8 @@ local function OnDraw()
       end
    end
 
-   ::continue::
-
    if gui.IsMenuOpen() and ImMenu.Begin("Custom Projectile Aimbot", true) then -- managing the menu
-      ImMenu.BeginFrame(1)                                                 -- tabs
+      ImMenu.BeginFrame(1)                                                     -- tabs
       if ImMenu.Button("Main") then
          Menu.tabs.Main = true
          Menu.tabs.Advanced = false
@@ -1326,22 +1268,16 @@ local function OnDraw()
    end
 end
 
---[[ Remove the menu when unloaded ]]                      --
-local function OnUnload()                                  -- Called when the script is unloaded
-   CreateCFG(string.format([[Lua %s]], Lua__fileName), Menu) --saving the config
-   UnloadLib()                                            --unloading lualib
-   client.Command('play "ui/buttonclickrelease"', true)   -- Play the "buttonclickrelease" sound
+--[[ Remove the menu when unloaded ]]                   --
+local function OnUnload()                               -- Called when the script is unloaded
+   ngl = nil
+   client.Command('play "ui/buttonclickrelease"', true) -- Play the "buttonclickrelease" sound
 end
 
---[[ Unregister previous callbacks ]] --
+callbacks.Register("CreateMove", OnCreateMove)
 
-callbacks.Unregister("CreateMove", "LNX.Aimbot.CreateMove")
-callbacks.Register("CreateMove", "LNX.Aimbot.CreateMove", OnCreateMove)
+callbacks.Register("Unload", OnUnload)
 
-callbacks.Unregister("Unload", "LNX.Aimbot.OnUnload")
-callbacks.Register("Unload", "LNX.Aimbot.OnUnload", OnUnload)
-
-callbacks.Unregister("Draw", "LNX.Aimbot.Draw")
-callbacks.Register("Draw", "LNX.Aimbot.Draw", OnDraw)
+callbacks.Register("Draw", OnDraw)
 --[[ Play sound when loaded ]]                --
 client.Command('play "ui/buttonclick"', true) -- Play the "buttonclick" sound when the script is loaded
