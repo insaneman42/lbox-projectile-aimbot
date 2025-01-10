@@ -12,15 +12,7 @@
 
 local Menu = { -- this is the config that will be loaded every time u load the script
 
-   tabs = {    -- dont touch this, this is just for managing the tabs in the menu
-      Main = true,
-      Advanced = false,
-      Visuals = false,
-   },
-
    Main = {
-      AimKey = gui.GetValue("aim key"),
-      AutoShoot = gui.GetValue("auto shoot") == 1 and true or false,
       MinDistance = 100,
       MaxDistance = 1500,
       MinHitchance = 40,
@@ -859,6 +851,7 @@ local function GetBestPlayer(me, players, bestTarget, bestFactor)
       if player:InCond(E_TFCOND.TFCond_Disguised) and bGetGUIValue("ignore disguised") then goto continue end
       if player:InCond(E_TFCOND.TFCond_DeadRingered) and bGetGUIValue("ignore deadringer") then goto continue end
       if player:InCond(E_TFCOND.TFCond_Bonked) and bGetGUIValue("ignore bonked") then goto continue end
+      if bGetGUIValue("ignore steam friends") and playerlist.GetPriority(player) == -1 then goto continue end
 
       local playerOrigin = player:GetAbsOrigin()
 
@@ -873,9 +866,12 @@ local function GetBestPlayer(me, players, bestTarget, bestFactor)
           math_abs(playerOrigin.y - localPlayerOrigin.y) +
           math_abs(playerOrigin.z - localPlayerOrigin.z)
 
+      local mecenter = ngl.GetEntityCenter(me)
+      local targetcenter = ngl.GetEntityCenter(player)
+
       local distanceFactor = ngl.RemapValClamped(distance, 50, 2500, 1, 0.09)
       local fovFactor = ngl.RemapValClamped(fov, 0, gui.GetValue("aim fov"), 1, 0.7)
-      local isVisible = ngl.VisPos(player, localPlayerOrigin + Vector3(0, 0, 75), playerOrigin + Vector3(0, 0, 75))
+      local isVisible = ngl.VisPos(player, mecenter, targetcenter)
       local visibilityFactor = isVisible and 1 or 0.5
       local factor = fovFactor * visibilityFactor * distanceFactor
 
@@ -890,13 +886,13 @@ local function GetBestPlayer(me, players, bestTarget, bestFactor)
    return bestTarget, bestFactor
 end
 
-local function GetBestSentry(me, sentries, bestTarget, bestFactor)
+local function GetBestBuilding(me, buildings, bestTarget, bestFactor)
    local myteamnumber = me:GetTeamNumber()
-   local localPlayerOrigin = me:GetAbsOrigin()
+   local localPlayerOrigin = ngl.GetShootPos(me)
    local localPlayerViewAngles = engine.GetViewAngles()
-   for _, sentry in pairs(sentries) do
-      if sentry:IsDormant() or not sentry:IsAlive() or sentry:GetTeamNumber() == myteamnumber then goto continue end
-      local playerOrigin = sentry:GetAbsOrigin()
+   for _, building in pairs(buildings) do
+      if building:IsDormant() or not building:GetHealth() == 0 or building:GetTeamNumber() == myteamnumber then goto continue end
+      local playerOrigin = ngl.GetEntityCenter(building)
 
       local angles = ngl.CalcAngle(localPlayerOrigin, playerOrigin)
       local fov = ngl.CalcFov(angles, localPlayerViewAngles)
@@ -911,47 +907,12 @@ local function GetBestSentry(me, sentries, bestTarget, bestFactor)
 
       local distanceFactor = ngl.RemapValClamped(distance, 50, 2500, 1, 0.09)
       local fovFactor = ngl.RemapValClamped(fov, 0, gui.GetValue("aim fov"), 1, 0.7)
-      local isVisible = ngl.VisPos(sentry, localPlayerOrigin + Vector3(0, 0, 75), playerOrigin + Vector3(0, 0, 75))
+      local isVisible = ngl.VisPos(building, localPlayerOrigin, playerOrigin)
       local visibilityFactor = isVisible and 1 or 0.5
       local factor = fovFactor * visibilityFactor * distanceFactor
 
       if factor > bestFactor then
-         bestTarget = sentry
-         bestFactor = factor
-      end
-      ::continue::
-   end
-
-   return bestTarget, bestFactor
-end
-
-local function GetBestOtherBuildings(me, buildings, bestTarget, bestFactor)
-   local myteamnumber = me:GetTeamNumber()
-   local localPlayerOrigin = me:GetAbsOrigin()
-   local localPlayerViewAngles = engine.GetViewAngles()
-   for _, sentry in pairs(buildings) do
-      if sentry:IsDormant() or not sentry:IsAlive() or sentry:GetTeamNumber() == myteamnumber then goto continue end
-      local playerOrigin = sentry:GetAbsOrigin()
-
-      local angles = ngl.CalcAngle(localPlayerOrigin, playerOrigin)
-      local fov = ngl.CalcFov(angles, localPlayerViewAngles)
-
-      if fov > gui.GetValue("aim fov") then
-         goto continue
-      end
-
-      local distance = math_abs(playerOrigin.x - localPlayerOrigin.x) +
-          math_abs(playerOrigin.y - localPlayerOrigin.y) +
-          math_abs(playerOrigin.z - localPlayerOrigin.z)
-
-      local distanceFactor = ngl.RemapValClamped(distance, 50, 2500, 1, 0.09)
-      local fovFactor = ngl.RemapValClamped(fov, 0, gui.GetValue("aim fov"), 1, 0.7)
-      local isVisible = ngl.VisPos(sentry, localPlayerOrigin + Vector3(0, 0, 75), playerOrigin + Vector3(0, 0, 75))
-      local visibilityFactor = isVisible and 1 or 0.5
-      local factor = fovFactor * visibilityFactor * distanceFactor
-
-      if factor > bestFactor then
-         bestTarget = sentry
+         bestTarget = building
          bestFactor = factor
       end
       ::continue::
@@ -968,27 +929,29 @@ local function GetBestTarget(me, weapon)
    local bestTarget = nil
    local bestFactor = 0
 
-   bestTarget, bestFactor = GetBestPlayer(me, players, bestTarget, bestFactor)
-   --[[ no workie, i dont fucking know why FIX LATER
    if bGetGUIValue("aim other buildings") then
       local teleporters = FindByClass("CObjectDispenser")
       local dispensers = FindByClass("CObjectTeleporter")
-      bestTarget, bestFactor = GetBestOtherBuildings(me, dispensers, bestTarget, bestFactor)
-      bestTarget, bestFactor = GetBestOtherBuildings(me, teleporters, bestTarget, bestFactor)
+      bestTarget, bestFactor = GetBestBuilding(me, dispensers, bestTarget, bestFactor)
+      bestTarget, bestFactor = GetBestBuilding(me, teleporters, bestTarget, bestFactor)
    end
 
    --- sentries will have the most priority, for obvious reasons (most risk for life)
    if bGetGUIValue("aim sentry") then
       local sentries = FindByClass("CObjectSentrygun")
-      bestTarget, bestFactor = GetBestSentry(me, sentries, bestTarget, bestFactor)
-   end]]
+      bestTarget, bestFactor = GetBestBuilding(me, sentries, bestTarget, bestFactor)
+   end
+
+   bestTarget, bestFactor = GetBestPlayer(me, players, bestTarget, bestFactor)
 
    if bestTarget then
+      local class = bestTarget:GetClass()
       -- Projectile weapon
       if weapon:IsMeleeWeapon() then
          return RunMelee(me, weapon, bestTarget)
       end
-      if weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_BULLET then
+      --- very ugly if-statement but it works
+      if weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_BULLET or class == "CObjectSentrygun" or class == "CObjectDispenser" or class == "CObjectTeleporter" then
          return RunBullet(me, weapon, bestTarget)
       else --- not a hitscan weapon, so we predict it
          return CheckProjectileTarget(me, weapon, bestTarget)
@@ -1064,12 +1027,17 @@ local function OnCreateMove(userCmd)
    if (userCmd.buttons & IN_ATTACK ~= 0) then
       -- Aim at the target
       userCmd:SetViewAngles(currentTarget.angles:Unpack())
-      userCmd.sendpacket = (isHitscan and projMethod == "silent +") or isMelee
+      userCmd:SetSendPacket(not (projMethod == "silent +" and not isHitscan and not isMelee))
 
       if (isHitscan and (hitscanMethod == "plain" or hitscanMethod == "smooth"))
           or (not isHitscan and (projMethod == "plain" or projMethod == "smooth")) then
          engine.SetViewAngles(EulerAngles(currentTarget.angles:Unpack()))
+         --elseif (isHitscan and hitscanMethod == "silent") or (not isHitscan and not isMelee and projMethod == "silent") then
+         --me:SetVAngles(Vector3(currentTarget.angles:Unpack()))
+         --client.ChatPrintf("SetVAngles was called!")
       end
+
+      return
    end
 
    currentTarget = nil
@@ -1136,7 +1104,9 @@ local function OnDraw()
       clear_lines = globals.RealTime()
    end
    -- Draw lines between the predicted positions
-   if Menu.Visuals.Active and vPath then
+   --if Menu.Visuals.Active and vPath then
+   local mode = string.lower(gui.GetValue("projectile aimbot"))
+   if (mode == "aim+draw" or mode == "draw") and vPath then
       local startPos
       draw.SetFont(font)
       for i = 1, #vPath - 1 do
