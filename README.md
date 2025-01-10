@@ -1,10 +1,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## This fork does NOT use lnxlib or immenu
+## This fork does **NOT** use LNXLib or ImMenu
 
 ---
 
-This fork has ***projectile*** and ***hitscan*** support, disable lbox's aimbot if you're gonna use this!
+This supports both ***projectile*** and ***hitscan***, disable lbox's aimbot if you want to use it.
 
 ---
 
@@ -13,6 +13,7 @@ Most settings of the aimbot are configured on lbox menu (ignore cloaked, bonked,
 ### Features
 - Options on the lbox menu that affect the script:
    - aim key
+   - aim fov
    - auto shoot
    - ignore cloaked
    - ignore bonked
