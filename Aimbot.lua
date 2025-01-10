@@ -58,9 +58,22 @@ local Menu = { -- this is the config that will be loaded every time u load the s
 ---@module "ngl"
 local ngl = load(http.Get("https://raw.githubusercontent.com/uosq/lbox-ngl-lib/refs/heads/main/ngl.lua"))()
 
-local menuLoaded, ImMenu = pcall(require, "ImMenu")
-assert(menuLoaded, "ImMenu not found, please install it!")
-assert(ImMenu.GetVersion() >= 0.66, "ImMenu version is too old, please update it!")
+--- download my ui lib straight from the repo
+---@module "source"
+--local alib = load(http.Get("https://raw.githubusercontent.com/uosq/lbox-alib/refs/heads/main/alib.lua"))()
+
+--local screenW, screenH = draw.GetScreenSize()
+--local centerX, centerY = math.floor(screenW / 2), math.floor(screenH / 2)
+
+--local window = {}
+--window.width, window.height = 300, 300
+--window.x, window.y = centerX - math.floor(window.width / 2), centerY - math.floor(window.height / 2)
+
+---TODO: make the window
+
+--local menuLoaded, ImMenu = pcall(require, "ImMenu")
+--assert(menuLoaded, "ImMenu not found, please install it!")
+--assert(ImMenu.GetVersion() >= 0.66, "ImMenu version is too old, please update it!")
 
 ---@alias AimTarget { entity : Entity, angles : EulerAngles, factor : number }
 
@@ -396,48 +409,39 @@ local DRAG_COEFFICIENT = 0.029374  -- Combined drag coefficients for drag simula
 ---@param timeToHit number  -- The maximum allowed time to hit the target
 ---@return { angles: EulerAngles, time: number, Prediction: Vector3, Positions: table }|false?  -- Returns calculated angles, time, predicted final position, and the flight path positions
 local function SolveProjectile(origin, dest, speed, gravity, sv_gravity, target, timeToHit)
-   -- Calculate the direction vector from origin to destination
-   local direction = dest - origin
-
-   -- Calculate squared speed for later use in equations
-   local speed_squared = speed * speed
-
-   -- Calculate the effective gravity based on server gravity settings and the specified gravity factor
-   local effective_gravity = sv_gravity * gravity
-
-   -- Calculate the horizontal (2D) distance and vertical (Z-axis) distance between origin and destination
-   local horizontal_distance = direction:Length2D()
-   local vertical_distance = direction.z
-
-   -- Entity filter function to avoid hitting the target itself
-   local shouldHitEntity = function(entity)
-      return entity:GetIndex() ~= target:GetIndex() or entity:GetTeamNumber() ~= target:GetTeamNumber()
-   end
-
-   -- Case for when there is no gravity (e.g., hitscan projectiles)
-   if effective_gravity == 0 then
-      -- Calculate the time to hit based on speed and distance
+   local function calculateStraight()
+      local direction = dest - origin
       local time_to_target = direction:Length() / speed
+
       if time_to_target > timeToHit then
-         return false -- Projectile will fly out of range, so return false
+         return false
       end
 
-      -- Perform a trace line to check if the path is clear
       local trace = TraceLine(origin, dest, MASK_PLAYERSOLID)
       if trace.fraction ~= FULL_HIT_FRACTION and trace.entity:GetName() ~= target:GetName() then
-         return false -- Path is obstructed, so return false
+         return false
       end
 
-      projectileSimulation = { origin, trace.endpos }
-
-      -- Return the result with no gravity calculations
       return {
          angles = ngl.CalcAngle(origin, dest),
          time = time_to_target,
          Prediction = dest,
          Positions = { origin, dest }
       }
-   else
+   end
+
+   local function calculateBallistic(effective_gravity)
+      -- Calculate the direction vector from origin to destination
+      local direction = dest - origin
+
+      -- Calculate squared speed for later use in equations
+      local speed_squared = speed * speed
+
+      -- Calculate the effective gravity based on server gravity settings and the specified gravity factor
+
+      -- Calculate the horizontal (2D) distance and vertical (Z-axis) distance between origin and destination
+      local horizontal_distance = direction:Length2D()
+      local vertical_distance = direction.z
       -- Ballistic arc calculation when gravity is present
 
       -- Calculate the term related to gravity and horizontal distance squared
@@ -490,7 +494,7 @@ local function SolveProjectile(origin, dest, speed, gravity, sv_gravity, target,
                 vertical_displacement)
 
          -- Perform a trace to check for collisions
-         local trace = TraceLine(current_position, new_position, MASK_PLAYERSOLID, shouldHitEntity)
+         local trace = TraceLine(current_position, new_position, MASK_PLAYERSOLID)
 
          -- Save the new position to the projectile path
          table.insert(projectileSimulation, new_position)
@@ -511,6 +515,13 @@ local function SolveProjectile(origin, dest, speed, gravity, sv_gravity, target,
          Prediction = current_position,
          Positions = projectileSimulation
       }
+   end
+
+   local effective_gravity = sv_gravity * gravity
+   if effective_gravity == 0 then
+      return calculateStraight()
+   else
+      return calculateBallistic(effective_gravity)
    end
 end
 
@@ -774,12 +785,8 @@ end
 ---@param localplayer Entity
 ---@param weapon Entity
 local function RunBullet(localplayer, weapon, target)
-   --- we will only run stuff when lbox aimbot is turned off
-   local aimPos = ngl.GetAimPosition(localplayer, weapon)
    local shootPos = ngl.GetShootPos(localplayer)
-
-   local targetPos = ngl.GetHitboxPos(target, aimPos)
-   if not targetPos then return end
+   local aimPos = ngl.GetAimPosition(localplayer, weapon)
 
    --local angle = ngl.CalcAngle(shootPos, targetPos)
    --- multipoint :3
@@ -837,16 +844,15 @@ local function RunMelee(localplayer, weapon, target)
 end
 
 ---@param me Entity
----@param weapon Entity
-local function GetBestTarget(me, weapon)
-   local players = FindByClass("CTFPlayer")
-   local bestTarget = nil
-   local bestFactor = 0
+---@param players table<integer, Entity>
+---@param bestTarget Entity?
+---@param bestFactor number?
+local function GetBestPlayer(me, players, bestTarget, bestFactor)
+   local myteamnumber = me:GetTeamNumber()
    local localPlayerOrigin = me:GetAbsOrigin()
    local localPlayerViewAngles = engine.GetViewAngles()
-
    for _, player in pairs(players) do
-      if player:GetTeamNumber() == me:GetTeamNumber() then goto continue end
+      if player:GetTeamNumber() == myteamnumber then goto continue end
       if player:IsDormant() or not player:IsAlive() then goto continue end
       if player:InCond(E_TFCOND.TFCond_Cloaked) and bGetGUIValue("ignore cloaked") then goto continue end
       if player:InCond(E_TFCOND.TFCond_Taunting) and bGetGUIValue("ignore taunting") then goto continue end
@@ -880,6 +886,102 @@ local function GetBestTarget(me, weapon)
 
       ::continue::
    end
+
+   return bestTarget, bestFactor
+end
+
+local function GetBestSentry(me, sentries, bestTarget, bestFactor)
+   local myteamnumber = me:GetTeamNumber()
+   local localPlayerOrigin = me:GetAbsOrigin()
+   local localPlayerViewAngles = engine.GetViewAngles()
+   for _, sentry in pairs(sentries) do
+      if sentry:IsDormant() or not sentry:IsAlive() or sentry:GetTeamNumber() == myteamnumber then goto continue end
+      local playerOrigin = sentry:GetAbsOrigin()
+
+      local angles = ngl.CalcAngle(localPlayerOrigin, playerOrigin)
+      local fov = ngl.CalcFov(angles, localPlayerViewAngles)
+
+      if fov > gui.GetValue("aim fov") then
+         goto continue
+      end
+
+      local distance = math_abs(playerOrigin.x - localPlayerOrigin.x) +
+          math_abs(playerOrigin.y - localPlayerOrigin.y) +
+          math_abs(playerOrigin.z - localPlayerOrigin.z)
+
+      local distanceFactor = ngl.RemapValClamped(distance, 50, 2500, 1, 0.09)
+      local fovFactor = ngl.RemapValClamped(fov, 0, gui.GetValue("aim fov"), 1, 0.7)
+      local isVisible = ngl.VisPos(sentry, localPlayerOrigin + Vector3(0, 0, 75), playerOrigin + Vector3(0, 0, 75))
+      local visibilityFactor = isVisible and 1 or 0.5
+      local factor = fovFactor * visibilityFactor * distanceFactor
+
+      if factor > bestFactor then
+         bestTarget = sentry
+         bestFactor = factor
+      end
+      ::continue::
+   end
+
+   return bestTarget, bestFactor
+end
+
+local function GetBestOtherBuildings(me, buildings, bestTarget, bestFactor)
+   local myteamnumber = me:GetTeamNumber()
+   local localPlayerOrigin = me:GetAbsOrigin()
+   local localPlayerViewAngles = engine.GetViewAngles()
+   for _, sentry in pairs(buildings) do
+      if sentry:IsDormant() or not sentry:IsAlive() or sentry:GetTeamNumber() == myteamnumber then goto continue end
+      local playerOrigin = sentry:GetAbsOrigin()
+
+      local angles = ngl.CalcAngle(localPlayerOrigin, playerOrigin)
+      local fov = ngl.CalcFov(angles, localPlayerViewAngles)
+
+      if fov > gui.GetValue("aim fov") then
+         goto continue
+      end
+
+      local distance = math_abs(playerOrigin.x - localPlayerOrigin.x) +
+          math_abs(playerOrigin.y - localPlayerOrigin.y) +
+          math_abs(playerOrigin.z - localPlayerOrigin.z)
+
+      local distanceFactor = ngl.RemapValClamped(distance, 50, 2500, 1, 0.09)
+      local fovFactor = ngl.RemapValClamped(fov, 0, gui.GetValue("aim fov"), 1, 0.7)
+      local isVisible = ngl.VisPos(sentry, localPlayerOrigin + Vector3(0, 0, 75), playerOrigin + Vector3(0, 0, 75))
+      local visibilityFactor = isVisible and 1 or 0.5
+      local factor = fovFactor * visibilityFactor * distanceFactor
+
+      if factor > bestFactor then
+         bestTarget = sentry
+         bestFactor = factor
+      end
+      ::continue::
+   end
+
+   return bestTarget, bestFactor
+end
+
+---@param me Entity
+---@param weapon Entity
+local function GetBestTarget(me, weapon)
+   local players = FindByClass("CTFPlayer")
+
+   local bestTarget = nil
+   local bestFactor = 0
+
+   bestTarget, bestFactor = GetBestPlayer(me, players, bestTarget, bestFactor)
+   --[[ no workie, i dont fucking know why FIX LATER
+   if bGetGUIValue("aim other buildings") then
+      local teleporters = FindByClass("CObjectDispenser")
+      local dispensers = FindByClass("CObjectTeleporter")
+      bestTarget, bestFactor = GetBestOtherBuildings(me, dispensers, bestTarget, bestFactor)
+      bestTarget, bestFactor = GetBestOtherBuildings(me, teleporters, bestTarget, bestFactor)
+   end
+
+   --- sentries will have the most priority, for obvious reasons (most risk for life)
+   if bGetGUIValue("aim sentry") then
+      local sentries = FindByClass("CObjectSentrygun")
+      bestTarget, bestFactor = GetBestSentry(me, sentries, bestTarget, bestFactor)
+   end]]
 
    if bestTarget then
       -- Projectile weapon
@@ -1169,102 +1271,6 @@ local function OnDraw()
             end
          end
       end
-   end
-
-   if gui.IsMenuOpen() and ImMenu.Begin("Custom Projectile Aimbot", true) then -- managing the menu
-      ImMenu.BeginFrame(1)                                                     -- tabs
-      if ImMenu.Button("Main") then
-         Menu.tabs.Main = true
-         Menu.tabs.Advanced = false
-         Menu.tabs.Visuals = false
-      end
-
-      if ImMenu.Button("Advanced") then
-         Menu.tabs.Main = false
-         Menu.tabs.Advanced = true
-         Menu.tabs.Visuals = false
-      end
-
-      if ImMenu.Button("Visuals") then
-         Menu.tabs.Main = false
-         Menu.tabs.Advanced = false
-         Menu.tabs.Visuals = true
-      end
-      ImMenu.EndFrame()
-
-      if Menu.tabs.Main then
-         ImMenu.BeginFrame(1)
-         Menu.Main.MinHitchance = ImMenu.Slider("Min Hitchance", Menu.Main.MinHitchance, 1, 100)
-         ImMenu.EndFrame()
-      end
-
-      if Menu.tabs.Advanced then
-         ImMenu.BeginFrame(1)
-         Menu.Advanced.StrafePrediction = ImMenu.Checkbox("Strafe Pred", Menu.Advanced.StrafePrediction)
-         ImMenu.EndFrame()
-
-         ImMenu.BeginFrame(1)
-         Menu.Advanced.SplashPrediction = ImMenu.Checkbox("Splash Prediction", Menu.Advanced.SplashPrediction)
-         ImMenu.EndFrame()
-
-         ImMenu.BeginFrame(1)
-         Menu.Advanced.SplashAccuracy = ImMenu.Slider("Splash Accuracy", Menu.Advanced.SplashAccuracy, 2, 47)
-         ImMenu.EndFrame()
-
-         ImMenu.BeginFrame(1)
-         Menu.Advanced.StrafeSamples = ImMenu.Slider("Strafe Samples", Menu.Advanced.StrafeSamples, 2, 49)
-         ImMenu.EndFrame()
-
-         ImMenu.BeginFrame(1)
-         Menu.Advanced.PredTicks = ImMenu.Slider("PredTicks", Menu.Advanced.PredTicks, 1, 200)
-         ImMenu.EndFrame()
-
-         ImMenu.BeginFrame(1)
-         Menu.Advanced.Hitchance_Accuracy = ImMenu.Slider("Accuracy", Menu.Advanced.Hitchance_Accuracy, 1,
-            Menu.Advanced.PredTicks)
-         ImMenu.EndFrame()
-
-         ImMenu.BeginFrame(1)
-         Menu.Advanced.ProjectileSegments = ImMenu.Slider("projectile Simulation Segments",
-            Menu.Advanced.ProjectileSegments, 3, 50)
-         ImMenu.EndFrame()
-      end
-
-      if Menu.tabs.Visuals then
-         ImMenu.BeginFrame(1)
-         Menu.Visuals.Active = ImMenu.Checkbox("Enable", Menu.Visuals.Active)
-         ImMenu.EndFrame()
-
-         if Menu.Visuals.Active then
-            ImMenu.BeginFrame(1)
-            Menu.Visuals.VisualizePath = ImMenu.Checkbox("Player Path", Menu.Visuals.VisualizePath)
-            Menu.Visuals.VisualizeProjectile = ImMenu.Checkbox("Projectile Simulation",
-               Menu.Visuals.VisualizeProjectile)
-            ImMenu.EndFrame()
-
-            ImMenu.BeginFrame(1)
-            Menu.Visuals.VisualizeHitPos = ImMenu.Checkbox("Visualize Hit Pos", Menu.Visuals.VisualizeHitPos)
-            Menu.Visuals.Crosshair = ImMenu.Checkbox("Crosshair", Menu.Visuals.Crosshair)
-            Menu.Visuals.NccPred = ImMenu.Checkbox("Nullcore Pred Visuals", Menu.Visuals.NccPred)
-            ImMenu.EndFrame()
-
-            ImMenu.BeginFrame(1)
-            Menu.Visuals.VisualizeHitchance = ImMenu.Checkbox("Visualize Hitchance", Menu.Visuals.VisualizeHitchance)
-            ImMenu.EndFrame()
-
-            if Menu.Visuals.VisualizePath then
-               ImMenu.BeginFrame(1)
-               ImMenu.Text("Visualize Path Settings")
-               ImMenu.EndFrame()
-               ImMenu.BeginFrame(1)
-               Menu.Visuals.Path_styles_selected = ImMenu.Option(Menu.Visuals.Path_styles_selected,
-                  Menu.Visuals.Path_styles)
-               ImMenu.EndFrame()
-            end
-         end
-      end
-
-      ImMenu.End()
    end
 end
 
