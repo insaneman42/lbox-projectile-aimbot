@@ -1,6 +1,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## This fork does **NOT** use LNXLib or ImMenu
+it uses my lib, but it gets downloaded on the script so you dont need to download anything extra :3
 
 ---
 
@@ -25,9 +26,9 @@ If Lmaobox's aimbot is enabled, this script ***WILL*** not run until you disable
    - ignore steam friends
    - aim method -> hitscan weapon aim method (silent, plain)
    - aim method (projectiles) -> projectile weapon aim method (silent, psilent, plain)
-   - projectile aimbot -> Aim+Draw makes the predicted path be visible
+   - projectile aimbot -> Aim+Draw / Draw makes the predicted path be visible
 
 ### Features soon to be added:
-- Aim at sentries, dispensers, teleporters and stickies
+- Aim at stickies
 - NPCs like Merasmus, that flying eyeball thing, tank, etc
 - more stuff that i forgor to remember ☠️

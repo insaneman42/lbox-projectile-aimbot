@@ -149,6 +149,8 @@ local projectileSimulation2 = Vector3()
 
 local EMPTY_VECTOR = Vector3() -- Represents an empty vector for zero velocity cases
 
+local currentTarget = nil
+
 ---@param player Entity
 local function CalcStrafe(player)
    local strafes = {}
@@ -984,25 +986,17 @@ local function GetBestTarget(me, weapon)
    end
 end
 
----@param userCmd UserCmd
-local function OnCreateMove(userCmd)
+local function CreateMove_PredictInBackground(usercmd)
+   projectileSimulation2 = EMPTY_VECTOR
    --- check if aimbot is enabled on lbox
    if gui.GetValue("aim bot") == 1 then return end
-
    if engine.IsChatOpen() or engine.Con_IsVisible() or engine.IsGameUIVisible() then return end
-   if not input.IsButtonDown(gui.GetValue("aim key")) then
-      return
-   end
-
-   projectileSimulation2 = EMPTY_VECTOR
 
    local me = entities:GetLocalPlayer()
    if not me or not me:IsAlive() then return end
 
    local weapon = ngl.GetCurrentWeapon(me)
    if not weapon then return end
-
-   if not ngl.CanWeaponShoot(me, weapon) then return end
 
    local netchannel = clientstate.GetNetChannel()
    if not netchannel then return end
@@ -1014,23 +1008,46 @@ local function OnCreateMove(userCmd)
    -- Get current lerp
    lerp = GetConVar("cl_interp") or 0
 
+   projectileSimulation2 = EMPTY_VECTOR
+
+   collectgarbage("stop")
    -- Get the best target
-   local currentTarget = GetBestTarget(me, weapon)
+   currentTarget = GetBestTarget(me, weapon)
+   collectgarbage("restart")
+end
+
+---@param userCmd UserCmd
+local function OnCreateMove(userCmd)
+   --- check if aimbot is enabled on lbox
+   if gui.GetValue("aim bot") == 1 then return end
+
+   if engine.IsChatOpen() or engine.Con_IsVisible() or engine.IsGameUIVisible() then return end
+   if not input.IsButtonDown(gui.GetValue("aim key")) then
+      return
+   end
+
+
+   local me = entities:GetLocalPlayer()
+   if not me or not me:IsAlive() then return end
+
+   local weapon = ngl.GetCurrentWeapon(me)
+   if not weapon then return end
+
+   if not ngl.CanWeaponShoot(me, weapon) then return end
+
+   -- Get the best target
    if currentTarget == nil then
       return
    end
 
-   local isHitscan = weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_BULLET
-   local isMelee = weapon:IsMeleeWeapon()
-   local hitscanMethod, projMethod = gui.GetValue("aim method"), gui.GetValue("aim method (projectile)")
-
+   --[[
    -- Calculate strafe angles (optional)
    if Menu.Advanced.StrafePrediction and not isHitscan and not isMelee then
       local strafe = CalcStrafe(me)
       if strafe then
          strafeAngles[currentTarget.entity:GetIndex()] = strafe.deltaAngle
       end
-   end
+   end]]
 
    -- Auto Shoot
    if bGetGUIValue("auto shoot") then
@@ -1055,6 +1072,10 @@ local function OnCreateMove(userCmd)
    end]]
 
    if (userCmd.buttons & IN_ATTACK ~= 0) then
+      local isHitscan = weapon:GetWeaponProjectileType() == E_ProjectileType.TF_PROJECTILE_BULLET
+      local isMelee = weapon:IsMeleeWeapon()
+      local hitscanMethod, projMethod = gui.GetValue("aim method"), gui.GetValue("aim method (projectile)")
+
       -- Aim at the target
       userCmd:SetViewAngles(currentTarget.angles:Unpack())
       userCmd:SetSendPacket(not (projMethod == "silent +" and not isHitscan and not isMelee))
@@ -1278,6 +1299,7 @@ local function OnUnload()                               -- Called when the scrip
 end
 
 callbacks.Register("CreateMove", OnCreateMove)
+callbacks.Register("CreateMove", CreateMove_PredictInBackground)
 
 callbacks.Register("Unload", OnUnload)
 
