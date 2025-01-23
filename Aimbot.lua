@@ -1126,7 +1126,6 @@ local function OnCreateMove(userCmd)
    if currentTarget == nil or currentTarget.angles == nil then
       return
    end
-   strafeAngles[currentTarget.entity:GetIndex()] = nil
 
    if currentTarget and Menu.Main.triggerbot == true then
       local fov = ngl.CalcFov(engine:GetViewAngles(), currentTarget.angles)
