@@ -1026,7 +1026,6 @@ local function OnCreateMove(userCmd)
       return
    end
 
-
    local me = entities:GetLocalPlayer()
    if not me or not me:IsAlive() then return end
 
