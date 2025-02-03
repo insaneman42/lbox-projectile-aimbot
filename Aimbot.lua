@@ -50,22 +50,9 @@ local Menu = { -- this is the config that will be loaded every time u load the s
 ---@module "ngl"
 local ngl = load(http.Get("https://raw.githubusercontent.com/uosq/lbox-ngl-lib/refs/heads/main/ngl.lua"))()
 
---- download my ui lib straight from the repo
----@module "source"
---local alib = load(http.Get("https://raw.githubusercontent.com/uosq/lbox-alib/refs/heads/main/alib.lua"))()
-
---local screenW, screenH = draw.GetScreenSize()
---local centerX, centerY = math.floor(screenW / 2), math.floor(screenH / 2)
-
---local window = {}
---window.width, window.height = 300, 300
---window.x, window.y = centerX - math.floor(window.width / 2), centerY - math.floor(window.height / 2)
-
----TODO: make the window
-
---local menuLoaded, ImMenu = pcall(require, "ImMenu")
---assert(menuLoaded, "ImMenu not found, please install it!")
---assert(ImMenu.GetVersion() >= 0.66, "ImMenu version is too old, please update it!")
+local menuLoaded, ImMenu = pcall(require, "ImMenu")
+assert(menuLoaded, "ImMenu not found, please install it!")
+assert(ImMenu.GetVersion() >= 0.66, "ImMenu version is too old, please update it!")
 
 ---@alias AimTarget { entity : Entity, angles : EulerAngles, factor : number }
 
@@ -1268,6 +1255,102 @@ local function OnDraw()
             end
          end
       end
+   end
+
+   if gui.IsMenuOpen() and ImMenu.Begin("Custom Projectile Aimbot", true) then -- managing the menu
+      ImMenu.BeginFrame(1)                                                     -- tabs
+      if ImMenu.Button("Main") then
+         Menu.tabs.Main = true
+         Menu.tabs.Advanced = false
+         Menu.tabs.Visuals = false
+      end
+
+      if ImMenu.Button("Advanced") then
+         Menu.tabs.Main = false
+         Menu.tabs.Advanced = true
+         Menu.tabs.Visuals = false
+      end
+
+      if ImMenu.Button("Visuals") then
+         Menu.tabs.Main = false
+         Menu.tabs.Advanced = false
+         Menu.tabs.Visuals = true
+      end
+      ImMenu.EndFrame()
+
+      if Menu.tabs.Main then
+         ImMenu.BeginFrame(1)
+         Menu.Main.MinHitchance = ImMenu.Slider("Min Hitchance", Menu.Main.MinHitchance, 1, 100)
+         ImMenu.EndFrame()
+      end
+
+      if Menu.tabs.Advanced then
+         ImMenu.BeginFrame(1)
+         Menu.Advanced.StrafePrediction = ImMenu.Checkbox("Strafe Pred", Menu.Advanced.StrafePrediction)
+         ImMenu.EndFrame()
+
+         ImMenu.BeginFrame(1)
+         Menu.Advanced.SplashPrediction = ImMenu.Checkbox("Splash Prediction", Menu.Advanced.SplashPrediction)
+         ImMenu.EndFrame()
+
+         ImMenu.BeginFrame(1)
+         Menu.Advanced.SplashAccuracy = ImMenu.Slider("Splash Accuracy", Menu.Advanced.SplashAccuracy, 2, 47)
+         ImMenu.EndFrame()
+
+         ImMenu.BeginFrame(1)
+         Menu.Advanced.StrafeSamples = ImMenu.Slider("Strafe Samples", Menu.Advanced.StrafeSamples, 2, 49)
+         ImMenu.EndFrame()
+
+         ImMenu.BeginFrame(1)
+         Menu.Advanced.PredTicks = ImMenu.Slider("PredTicks", Menu.Advanced.PredTicks, 1, 200)
+         ImMenu.EndFrame()
+
+         ImMenu.BeginFrame(1)
+         Menu.Advanced.Hitchance_Accuracy = ImMenu.Slider("Accuracy", Menu.Advanced.Hitchance_Accuracy, 1,
+            Menu.Advanced.PredTicks)
+         ImMenu.EndFrame()
+
+         ImMenu.BeginFrame(1)
+         Menu.Advanced.ProjectileSegments = ImMenu.Slider("projectile Simulation Segments",
+            Menu.Advanced.ProjectileSegments, 3, 50)
+         ImMenu.EndFrame()
+      end
+
+      if Menu.tabs.Visuals then
+         ImMenu.BeginFrame(1)
+         Menu.Visuals.Active = ImMenu.Checkbox("Enable", Menu.Visuals.Active)
+         ImMenu.EndFrame()
+
+         if Menu.Visuals.Active then
+            ImMenu.BeginFrame(1)
+            Menu.Visuals.VisualizePath = ImMenu.Checkbox("Player Path", Menu.Visuals.VisualizePath)
+            Menu.Visuals.VisualizeProjectile = ImMenu.Checkbox("Projectile Simulation",
+               Menu.Visuals.VisualizeProjectile)
+            ImMenu.EndFrame()
+
+            ImMenu.BeginFrame(1)
+            Menu.Visuals.VisualizeHitPos = ImMenu.Checkbox("Visualize Hit Pos", Menu.Visuals.VisualizeHitPos)
+            Menu.Visuals.Crosshair = ImMenu.Checkbox("Crosshair", Menu.Visuals.Crosshair)
+            Menu.Visuals.NccPred = ImMenu.Checkbox("Nullcore Pred Visuals", Menu.Visuals.NccPred)
+            ImMenu.EndFrame()
+
+            ImMenu.BeginFrame(1)
+            Menu.Visuals.VisualizeHitchance = ImMenu.Checkbox("Visualize Hitchance", Menu.Visuals.VisualizeHitchance)
+            ImMenu.EndFrame()
+
+            if Menu.Visuals.VisualizePath then
+               ImMenu.BeginFrame(1)
+               ImMenu.Text("Visualize Path Settings")
+               ImMenu.EndFrame()
+               ImMenu.BeginFrame(1)
+               Menu.Visuals.Path_styles_selected = ImMenu.Option(Menu.Visuals.Path_styles_selected,
+                  Menu.Visuals.Path_styles)
+               ImMenu.EndFrame()
+            end
+         end
+      end
+
+      ImMenu.End()
    end
 end
 
