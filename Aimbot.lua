@@ -1380,11 +1380,3 @@ callbacks.Register("Unload", OnUnload)
 callbacks.Register("Draw", OnDraw)
 --[[ Play sound when loaded ]]                --
 client.Command('play "ui/buttonclick"', true) -- Play the "buttonclick" sound when the script is loaded
-local Menu = { -- this is the config that will be loaded every time u load the script
-
-   tabs = {    -- dont touch this, this is just for managing the tabs in the menu
-      Main = true,
-      Advanced = false,
-      Visuals = false,
-   },
-
