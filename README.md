@@ -5,13 +5,13 @@ it uses my lib, but it gets downloaded on the script so you dont need to downloa
 
 ---
 
-Only for ***projectiles***
+This supports both ***projectile*** and ***hitscan***, disable lbox's aimbot if you want to use it.
 
 ---
 
 Most settings of the aimbot are configured on lbox menu (ignore cloaked, bonked, aim fov, aim key, aim method, etc)
 
-If Lmaobox's aimbot is enabled, this script ***WILL*** disable it when using a projectile weapon :) (we dont need 2 aimbots running at the same time, do we?)
+If Lmaobox's aimbot is enabled, this script ***WILL*** not run until you disable it :) (we dont need 2 aimbots running at the same time, do we?)
 
 ### Features
 - Options on the lbox menu that affect the script:
@@ -24,10 +24,11 @@ If Lmaobox's aimbot is enabled, this script ***WILL*** disable it when using a p
    - ignore disguised
    - ignore deadringer
    - ignore steam friends
+   - aim method -> hitscan weapon aim method (silent, plain)
    - aim method (projectiles) -> projectile weapon aim method (silent, psilent, plain)
-   - projectile aimbot -> Draw makes the predicted path be visible
+   - projectile aimbot -> Aim+Draw / Draw makes the predicted path be visible
 
 ### Features soon to be added:
-- Aim at stickies (scorch shot)
+- Aim at stickies
 - NPCs like Merasmus, that flying eyeball thing, tank, etc
 - more stuff that i forgor to remember ☠️
